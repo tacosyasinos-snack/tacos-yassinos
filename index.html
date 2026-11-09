@@ -107,6 +107,7 @@ const E = {
     TACOS: "🌯", 
     PANINI: "🥪", 
     CHAWARMA: "🥙", 
+    BURGER: "🍔", 
     PIZZA: "🍕", 
     SALADES: "🥗", 
     PLATS: "🍢", 
@@ -125,12 +126,15 @@ function imgFor(cat, name) {
     const n = (name || "").toLowerCase();
     switch (cat) {
         case "TACOS":
+            if (/box/.test(n)) return IMG.box;
+            if (/wrap/.test(n)) return IMG.wrap;
             if (/xl|gega/.test(n)) return IMG.tacosxl;
             if (/torittos|toritos/.test(n)) return IMG.toritos;
             if (/crispy/.test(n)) return IMG.crispy;
             return IMG.tacos;
         case "PANINI": return IMG.panini;
         case "CHAWARMA": return IMG.chawarma;
+        case "BURGER": return IMG.burger;
         case "PIZZA": return IMG.pizza;
         case "SALADES": return IMG.salades;
         case "PLATS": return IMG.plats;
@@ -145,41 +149,47 @@ function imgFor(cat, name) {
 
 const defaultMenu = {
     TACOS: [
-        ["Tacos Poulet", 30], ["Tacos Viande", 30], ["Tacos Nuggets", 30], 
-        ["Tacos Chawarma", 30], ["Tacos Mixte", 30], ["Tacos Crispy", 30], 
+        ["Tacos Poulet", 32], ["Tacos Viande", 30], ["Tacos Nuggets", 30], 
+        ["Tacos Chawarma", 30], ["Tacos Mixte", 30], ["Tacos Crispy", 32], 
         ["Tacos Jambon", 30], ["Tacos Mexicain", 32], ["Cordon Bleu", 32], 
-        ["Big Tacos", 37], ["Tacos Torittos", 39], ["Tacos Gratiné", 40], 
+        ["Big Tacos", 37], ["Tacos Torittos", 42], ["Tacos Gratiné", 40], 
         ["Tacos Poulet XL", 55], ["Viande Hachée XL Tacos", 55], 
-        ["Tacos Crispy XL", 58], ["Mixte XL", 58], ["Tacos Gega", 150]
+        ["Tacos Crispy XL", 58], ["Mixte XL", 58], ["Tacos Gega", 150],
+        ["Box Crispy", 39], ["Wrap", 35]
     ],
     PANINI: [
-        ["Panini Poulet", 25], ["Panini Viande Hachée", 25], 
+        ["Panini Poulet", 32], ["Panini Viande Hachée", 32], 
         ["Panini Nuggets", 25], ["Panini Mixte", 26]
     ],
     CHAWARMA: [
         ["Chawarma Normale", 25], ["Fromage + Frite", 30], ["Double Fromage", 32]
     ],
+    BURGER: [
+        ["Chicken Burger", 25], ["Cheese Burger", 25], 
+        ["Double Cheese Burger", 35], ["Double Chicken Burger", 35]
+    ],
     PIZZA: [
-        ["Pizza Margarita", [20, 30]], ["Pizza Végétarienne", [20, 30]], 
+        ["Pizza Margarita", [20, 30]], ["Pizza Végétarienne", [25, 30]], 
         ["Pizza Pepperoni", [25, 35]], ["Pizza Viande Hachée", [25, 35]], 
         ["Pizza Poulet", [25, 35]], ["Pizza Thon", [25, 35]], 
         ["Pizza 4 Saisons", [30, 37]], ["Pizza Chawarma", [28, 38]], 
-        ["Pizza Fruits de Mer", [30, 45]]
+        ["Pizza Fruits de Mer", [30, 47]],
+        ["Pizza Yassinos", [35, 47]]
     ],
     SALADES: [
-        ["Salade Chef", 20], ["Salade Riche", 25], ["Salade Crispy", 25], 
+        ["Salade Chef", 20], ["Salade Riche", 25], ["Salade Crispy", 30], 
         ["Salade Variée", 30], ["Salade Fruits de Mer", 40]
     ],
     PLATS: [
         ["Brochette Poulet", 35], ["Brochette Viande", 35], 
-        ["Plat Crispy", 35], ["Plat Chawarma", 35], ["Plat Émincé", 40]
+        ["Plat Crispy", 40], ["Plat Chawarma", 35], ["Plat Émincé", 35]
     ],
     PASTICCIO: [
-        ["Pasticcio Poulet", 35], ["Pasticcio Jambon", 30], 
+        ["Pasticcio Poulet", 35], ["Pasticcio Jambon", 35], 
         ["Pasticcio Nuggets", 35], ["Pasticcio Viande Hachée", 35], 
         ["Pasticcio Mixte", 35], ["Pasticcio Cordon Bleu", 35], 
         ["Pasticcio Chawarma", 35], ["Pasticcio Fruits de Mer", 45], 
-        ["Kassriya Pasticcio", 150]
+        ["Kassriya Pasticcio", 200]
     ],
     "PÂTES": [
         ["Pâtes Charcuterie", 35], ["Pâtes Poulet", 35], 
@@ -190,8 +200,8 @@ const defaultMenu = {
         ["6 pièces Nuggets", 25], ["6 Mozza Sticks", 35]
     ],
     BOISSONS: [
-        ["Jus citron / orange", 10], ["Jus avocat", 30], 
-        ["Jus Panaché", 18], ["Soda 1 L", 15]
+        ["Jus citron", 10], ["Jus orange", 15], ["Jus avocat", 30], 
+        ["Jus Panaché", 18], ["Soda 1 L", 15], ["Canette", 5]
     ],
     DESSERT: [
         ["Tiramisu", 20]
@@ -199,8 +209,8 @@ const defaultMenu = {
 };
 
 function toast(msg){const el=document.getElementById("toast");el.textContent=msg;el.classList.remove("hide");clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.add("hide"),2500);}
-function store(v){try{localStorage.setItem("yassinos_custom_menu",JSON.stringify(v));}catch(e){}}
-let savedMenu=null;try{savedMenu=localStorage.getItem("yassinos_custom_menu");}catch(e){}
+function store(v){try{localStorage.setItem("yassinos_custom_menu_v3",JSON.stringify(v));}catch(e){}}
+let savedMenu=null;try{savedMenu=localStorage.getItem("yassinos_custom_menu_v3");}catch(e){}
 let M = savedMenu ? JSON.parse(savedMenu) : defaultMenu;
 
 let currentCategory = Object.keys(M)[0];
