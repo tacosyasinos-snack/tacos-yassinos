@@ -60,6 +60,24 @@ header{position:relative;z-index:2}
 .xbtn{width:100%;background:#3a3a3a;color:#fff;margin:6px 0 10px}
 .delbtn{width:100%;background:#000;color:var(--gold);border-color:var(--gold)}
 </style>
+<style>
+/* ===== مكان التوصيل ===== */
+.dlv{background:rgba(0,0,0,.85);color:#fff;border:1px solid var(--gold);border-radius:14px;padding:12px;margin-top:16px}
+.dlv h3{margin:0 0 10px;color:var(--gold);font-size:16px}
+.tabs{display:flex;gap:6px;margin-bottom:10px}
+.tabs button{flex:1;background:transparent;color:var(--gold);border:1px solid var(--gold);border-radius:10px;padding:10px 6px;font-weight:800;cursor:pointer}
+.tabs button.on{background:var(--gold);color:#111}
+.dlv textarea{width:100%;padding:10px;border-radius:9px;border:0;font:inherit;font-size:15px;background:#e6e6e6;color:#111;resize:vertical}
+#acBox gmp-place-autocomplete{display:block;width:100%;margin-bottom:8px;color-scheme:light}
+.gw{position:relative}
+#gmap{height:min(52vh,380px);border-radius:12px;overflow:hidden;background:#333}
+.pin{position:absolute;left:50%;top:50%;width:34px;height:44px;margin:-44px 0 0 -17px;pointer-events:none;z-index:2;filter:drop-shadow(0 3px 3px #0008)}
+.mapbtns{display:flex;gap:6px;margin-top:8px}
+.mapbtns .b{flex:1;padding:11px 6px}
+#gpsBtn{background:#3a3a3a;color:#fff}
+#mapAddr{margin:8px 0 6px;font-size:14px;line-height:1.5}
+#mapAddr.ok{color:#7cfc9a}
+</style>
 </head>
 <body>
 
@@ -103,6 +121,10 @@ header{position:relative;z-index:2}
 
 <script>
 const WA = "212661057031";
+
+// ===== إعدادات Google Maps =====
+const GMAPS_KEY = ""; // ← ضع هنا مفتاح Google Maps API الخاص بك
+const MAP_CENTER = {lat: 34.0331, lng: -5.0003}; // مركز الخريطة الافتراضي (غيّره إلى موقع مطعمك)
 const E = {
     TACOS: "🌯", 
     PANINI: "🥪", 
@@ -390,24 +412,27 @@ function addToCart(cat, idx, sizeIdx) {
 }
 
 function openCart() {
-    let main = document.getElementById('main');
-    let html = `<h2>🛒 Mon Panier</h2>`;
-    if (cart.length === 0) {
-        html += `<p>Le panier est vide.</p>`;
-    } else {
-        cart.forEach((c, i) => {
-            html += `<div class="row"><span>${c.name} - ${c.price} DH</span><div class="q"><button onclick="changeQty(${i}, -1)">-</button><span>${c.qty}</span><button onclick="changeQty(${i}, 1)">+</button></div></div>`;
-        });
-        let tot = cart.reduce((s, c) => s + c.price * c.qty, 0);
-        html += `<div class="row tot"><b>Total:</b> <b>${tot} DH</b></div><button class="b" style="width:100%;margin-top:15px;" onclick="sendWA()">Envoyer sur WhatsApp 💬</button>`;
-    }
-    main.innerHTML = html;
+    const main = document.getElementById('main');
+    if (cart.length === 0) { main.innerHTML = `<h2>🛒 Mon Panier</h2><p>Le panier est vide.</p>`; return; }
+    main.innerHTML = `<h2>🛒 Mon Panier</h2><div id="cartList"></div>` + DLV_HTML +
+        `<button class="b" style="width:100%;margin-top:15px;" onclick="sendWA()">Envoyer sur WhatsApp 💬</button>`;
+    renderCartList();
+    initDelivery();
+}
+
+function renderCartList() {
+    let html = "";
+    cart.forEach((c, i) => {
+        html += `<div class="row"><span>${c.name} - ${c.price} DH</span><div class="q"><button onclick="changeQty(${i}, -1)">-</button><span>${c.qty}</span><button onclick="changeQty(${i}, 1)">+</button></div></div>`;
+    });
+    const tot = cart.reduce((s, c) => s + c.price * c.qty, 0);
+    document.getElementById('cartList').innerHTML = html + `<div class="row tot"><b>Total:</b> <b>${tot} DH</b></div>`;
 }
 
 function changeQty(i, d) {
     cart[i].qty += d;
     if (cart[i].qty <= 0) cart.splice(i, 1);
-    openCart();
+    cart.length ? renderCartList() : openCart();
     updateBar();
 }
 
@@ -418,12 +443,158 @@ function updateBar() {
     btn.textContent = totalQty > 0 ? `🛒 Panier (${totalQty} articles) - ${totalPrice} DH` : `🛒 Voir le panier`;
 }
 
+/* ===== مكان التوصيل: كتابة العنوان أو اختياره من Google Maps ===== */
+const LOC = {mode: "text", text: "", lat: null, lng: null, addr: "", confirmed: false};
+let gmP = null, mapP = null, gMap = null, geo = null, panel = null, cur = null, geoT = null;
+
+const DLV_HTML = `<div class="dlv" id="dlv"><h3>📍 Lieu de livraison · مكان التوصيل</h3>
+<div class="tabs"><button id="tabText" onclick="setMode('text')">✍️ Adresse · العنوان</button><button id="tabMap" onclick="setMode('map')">🗺️ Google Maps</button></div>
+<div id="boxText"><textarea id="addrTxt" dir="auto" rows="3" oninput="LOC.text=this.value" placeholder="الحي، الشارع، رقم الدار، أقرب معلمة&#10;Quartier, rue, n° de maison, repère"></textarea></div>
+<div id="boxMap" class="hide"><div id="mapHost"></div></div></div>`;
+
+function initDelivery() { document.getElementById("addrTxt").value = LOC.text; setMode(LOC.mode); }
+
+function setMode(m) {
+    LOC.mode = m;
+    if (!document.getElementById("dlv")) return;
+    document.getElementById("tabText").classList.toggle("on", m === "text");
+    document.getElementById("tabMap").classList.toggle("on", m === "map");
+    document.getElementById("boxText").classList.toggle("hide", m !== "text");
+    document.getElementById("boxMap").classList.toggle("hide", m !== "map");
+    if (m === "map") showMap();
+}
+
+function loadGMaps() {
+    if (window.google && google.maps && google.maps.importLibrary) return Promise.resolve();
+    if (gmP) return gmP;
+    gmP = new Promise((ok, no) => {
+        if (!GMAPS_KEY) return no(new Error("ضع مفتاح Google Maps في GMAPS_KEY"));
+        window.__gmInit = ok;
+        const s = document.createElement("script");
+        s.src = "https://maps.googleapis.com/maps/api/js?key=" + encodeURIComponent(GMAPS_KEY) + "&v=weekly&language=ar&region=MA&loading=async&callback=__gmInit";
+        s.async = true; s.onerror = () => no(new Error("network"));
+        document.head.appendChild(s);
+    }).catch(e => { gmP = null; throw e; });
+    return gmP;
+}
+
+function mapFail(e) {
+    console.warn("Google Maps:", e);
+    toast("تعذّر تحميل الخريطة — اكتب عنوانك بدلاً منها");
+    setMode("text");
+}
+window.gm_authFailure = () => mapFail("auth");
+
+function buildPanel() {
+    const d = document.createElement("div");
+    d.innerHTML = `<div id="acBox"></div>
+<div class="gw"><div id="gmap"></div><svg class="pin" viewBox="0 0 34 44"><path d="M17 43S2 27 2 16a15 15 0 0 1 30 0c0 11-15 27-15 27z" fill="#d4af37" stroke="#111" stroke-width="2.5"/><circle cx="17" cy="16" r="5.5" fill="#111"/></svg></div>
+<div class="mapbtns"><button class="b" id="gpsBtn">🎯 موقعي الحالي</button><button class="b" id="okBtn">✅ تأكيد هذا المكان</button></div>
+<p id="mapAddr" dir="auto">⏳ جاري تحميل الخريطة…</p>
+<input id="addrNote" dir="auto" placeholder="تفاصيل إضافية (اختياري): الطابق، لون الباب…">`;
+    d.querySelector("#gpsBtn").onclick = useGPS;
+    d.querySelector("#okBtn").onclick = confirmSpot;
+    return d;
+}
+
+async function showMap() {
+    if (!panel) panel = buildPanel();
+    document.getElementById("mapHost").appendChild(panel);
+    try {
+        await loadGMaps();
+        if (!mapP) mapP = buildMap().catch(e => { mapP = null; throw e; });
+        else {
+            await mapP;
+            const c = gMap.getCenter();
+            google.maps.event.trigger(gMap, "resize");
+            gMap.setCenter(c);
+        }
+        paint();
+    } catch (e) { mapFail(e); }
+}
+
+async function buildMap() {
+    const {Map: GMap} = await google.maps.importLibrary("maps");
+    const {Geocoder} = await google.maps.importLibrary("geocoding");
+    geo = new Geocoder();
+    const has = LOC.lat != null;
+    gMap = new GMap(document.getElementById("gmap"), {
+        center: has ? {lat: LOC.lat, lng: LOC.lng} : MAP_CENTER, zoom: has ? 17 : 14,
+        gestureHandling: "greedy", clickableIcons: false,
+        mapTypeControl: false, streetViewControl: false, fullscreenControl: false
+    });
+    gMap.addListener("idle", onIdle);
+    try { // خانة البحث الذكي من Google Places
+        const {PlaceAutocompleteElement} = await google.maps.importLibrary("places");
+        const ac = new PlaceAutocompleteElement({includedRegionCodes: ["ma"]});
+        ac.placeholder = "🔎 ابحث عن حيّ، شارع أو معلمة";
+        const pick = async ev => {
+            const pl = ev.place || (ev.placePrediction && ev.placePrediction.toPlace());
+            if (!pl) return;
+            await pl.fetchFields({fields: ["location", "formattedAddress"]});
+            if (pl.location) { gMap.setCenter(pl.location); gMap.setZoom(17); }
+        };
+        ac.addEventListener("gmp-select", pick);
+        ac.addEventListener("gmp-placeselect", pick);
+        document.getElementById("acBox").appendChild(ac);
+    } catch (e) { console.warn("Places:", e); }
+    if (!has) useGPS(true);
+}
+
+function onIdle() {
+    const c = gMap.getCenter(), lat = c.lat(), lng = c.lng();
+    if (LOC.confirmed && (Math.abs(lat - LOC.lat) > 1e-6 || Math.abs(lng - LOC.lng) > 1e-6)) LOC.confirmed = false;
+    if (cur && Math.abs(lat - cur.lat) < 1e-6 && Math.abs(lng - cur.lng) < 1e-6) { paint(); return; }
+    const me = cur = {lat, lng, addr: ""};
+    paint();
+    clearTimeout(geoT);
+    geoT = setTimeout(() => geo.geocode({location: {lat, lng}})
+        .then(r => { me.addr = (r.results[0] || {}).formatted_address || ""; })
+        .catch(() => {})
+        .then(() => { if (LOC.confirmed && LOC.lat === me.lat && LOC.lng === me.lng && !LOC.addr) LOC.addr = me.addr; paint(); }), 350);
+}
+
+function paint() {
+    const el = document.getElementById("mapAddr");
+    if (!el) return;
+    if (LOC.confirmed) { el.className = "ok"; el.textContent = "✅ " + (LOC.addr || "تم تحديد موقعك على الخريطة"); }
+    else { el.className = ""; el.textContent = "📍 " + ((cur && cur.addr) || "حرّك الخريطة ليكون الدبوس فوق بيتك ثم اضغط «تأكيد»"); }
+}
+
+function useGPS(silent) {
+    const quiet = silent === true;
+    if (!navigator.geolocation) { if (!quiet) toast("المتصفح لا يدعم تحديد الموقع"); return; }
+    navigator.geolocation.getCurrentPosition(
+        p => { gMap.setCenter({lat: p.coords.latitude, lng: p.coords.longitude}); gMap.setZoom(17); },
+        () => { if (!quiet) toast("تعذّر تحديد موقعك. فعّل الـGPS أو حرّك الخريطة يدوياً"); },
+        {enableHighAccuracy: true, timeout: 10000}
+    );
+}
+
+function confirmSpot() {
+    if (!cur) return;
+    Object.assign(LOC, {lat: cur.lat, lng: cur.lng, addr: cur.addr || "", confirmed: true});
+    paint();
+    toast("تم تأكيد موقع التوصيل ✅");
+}
+
 function sendWA() {
-    let txt = "Bonjour, je souhaite commander:%0A";
-    cart.forEach(c => { txt += `- ${c.qty}x ${c.name} (${c.price * c.qty} DH)%0A`; });
-    let tot = cart.reduce((s, c) => s + c.price * c.qty, 0);
-    txt += `%0ATotal: ${tot} DH`;
-    window.open(`https://wa.me/${WA}?text=${txt}`, '_blank');
+    let place = "";
+    if (LOC.mode === "text") {
+        const t = (LOC.text || "").trim();
+        if (t.length < 6) { toast("✍️ اكتب عنوان التوصيل (الحي، الشارع، رقم الدار)"); document.getElementById("addrTxt").focus(); return; }
+        place = "📍 Adresse: " + t;
+    } else {
+        if (!LOC.confirmed) { toast("🗺️ حرّك الخريطة إلى بيتك ثم اضغط «تأكيد هذا المكان»"); document.getElementById("dlv").scrollIntoView({behavior: "smooth"}); return; }
+        const note = ((document.getElementById("addrNote") || {}).value || "").trim();
+        place = "📍 Adresse: " + (LOC.addr || "(position sur la carte)") + (note ? "\nDétails: " + note : "") +
+            "\n🗺️ Google Maps: https://www.google.com/maps/search/?api=1&query=" + LOC.lat.toFixed(6) + "," + LOC.lng.toFixed(6);
+    }
+    let txt = "Bonjour, je souhaite commander:\n";
+    cart.forEach(c => { txt += `- ${c.qty}x ${c.name} (${c.price * c.qty} DH)\n`; });
+    const tot = cart.reduce((s, c) => s + c.price * c.qty, 0);
+    txt += `\nTotal: ${tot} DH\n\n` + place;
+    window.open("https://wa.me/" + WA + "?text=" + encodeURIComponent(txt), "_blank");
 }
 
 renderNav();
